@@ -2,13 +2,14 @@
 import React, { createContext, useState, useContext, useEffect } from 'react';
 
 export type UserRole = 'admin' | 'patient' | 'doctor' | 'lab';
+export type UserStatus = 'active' | 'inactive' | 'pending';
 
 export interface User {
   id: string;
   name: string;
   email: string;
   role: UserRole;
-  status?: 'active' | 'inactive' | 'pending';
+  status?: UserStatus;
   lastActivity?: string;
 }
 
@@ -66,14 +67,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       throw new Error('User already exists with this email');
     }
     
-    // Create new user
+    // Create new user with explicit status type
     const userId = `user-${Date.now().toString(36)}-${Math.random().toString(36).substr(2, 9)}`;
-    const newUser = {
+    const newUser: User = {
       id: userId,
       name,
       email,
       role,
-      status: role === 'admin' ? 'active' : 'pending', // Admins are auto-approved, others pending
+      status: role === 'admin' ? 'active' as UserStatus : 'pending' as UserStatus,
       lastActivity: new Date().toISOString(),
     };
     
@@ -197,7 +198,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     
     const allUsers = getStoredItem('medrec_all_users') || {};
     if (allUsers[userId]) {
-      allUsers[userId].status = 'active';
+      allUsers[userId].status = 'active' as UserStatus;
       localStorage.setItem('medrec_all_users', JSON.stringify(allUsers));
     }
   };
@@ -207,7 +208,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     
     const allUsers = getStoredItem('medrec_all_users') || {};
     if (allUsers[userId]) {
-      allUsers[userId].status = 'inactive';
+      allUsers[userId].status = 'inactive' as UserStatus;
       localStorage.setItem('medrec_all_users', JSON.stringify(allUsers));
     }
   };
@@ -217,7 +218,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     
     const allUsers = getStoredItem('medrec_all_users') || {};
     if (allUsers[userId]) {
-      allUsers[userId].status = 'active';
+      allUsers[userId].status = 'active' as UserStatus;
       localStorage.setItem('medrec_all_users', JSON.stringify(allUsers));
     }
   };
