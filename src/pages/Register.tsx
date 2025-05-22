@@ -8,6 +8,7 @@ import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter }
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { useAuth, UserRole } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
+import { AlertCircle } from 'lucide-react';
 
 const Register = () => {
   const [name, setName] = useState('');
@@ -16,6 +17,8 @@ const Register = () => {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [role, setRole] = useState<UserRole>('patient');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [success, setSuccess] = useState(false);
+  const [errorMessage, setErrorMessage] = useState('');
   
   const { register } = useAuth();
   const navigate = useNavigate();
@@ -23,22 +26,15 @@ const Register = () => {
   
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setErrorMessage('');
     
     if (!name || !email || !password || !confirmPassword) {
-      toast({
-        title: 'Validation Error',
-        description: 'Please fill in all fields',
-        variant: 'destructive',
-      });
+      setErrorMessage('Please fill in all fields');
       return;
     }
     
     if (password !== confirmPassword) {
-      toast({
-        title: 'Validation Error',
-        description: 'Passwords do not match',
-        variant: 'destructive',
-      });
+      setErrorMessage('Passwords do not match');
       return;
     }
     
@@ -46,12 +42,25 @@ const Register = () => {
     
     try {
       await register(name, email, password, role);
-      toast({
-        title: 'Registration Successful',
-        description: 'Your account has been created',
-      });
-      navigate(`/${role}`);
+      
+      if (role === 'admin') {
+        // Admin accounts are auto-approved and can log in immediately
+        toast({
+          title: 'Registration Successful',
+          description: 'Your admin account has been created',
+        });
+        navigate(`/${role}`);
+      } else {
+        // Non-admin accounts need approval
+        setSuccess(true);
+        toast({
+          title: 'Registration Pending Approval',
+          description: 'Your account has been created and is awaiting administrator approval',
+        });
+      }
     } catch (error: any) {
+      setErrorMessage(error.message || 'An error occurred during registration');
+      
       toast({
         title: 'Registration Failed',
         description: error.message || 'An error occurred during registration',
@@ -61,6 +70,36 @@ const Register = () => {
       setIsSubmitting(false);
     }
   };
+  
+  if (success && role !== 'admin') {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background p-4">
+        <Card className="w-full max-w-md">
+          <CardHeader>
+            <CardTitle>Registration Pending</CardTitle>
+            <CardDescription>
+              Your account is awaiting administrator approval
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="bg-primary/10 text-primary p-4 rounded-md text-center">
+              <p className="text-lg font-medium mb-2">Thank you for registering!</p>
+              <p className="mb-4">
+                Your account has been created and is pending approval from an administrator. 
+                You will be able to log in once your account has been approved.
+              </p>
+              <Button 
+                onClick={() => navigate('/login')}
+                className="mt-2"
+              >
+                Return to Login
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
   
   return (
     <div className="min-h-screen flex items-center justify-center bg-background p-4">
@@ -83,6 +122,12 @@ const Register = () => {
             </CardDescription>
           </CardHeader>
           <CardContent>
+            {errorMessage && (
+              <div className="bg-destructive/10 text-destructive p-3 rounded-md flex items-center space-x-2 mb-4">
+                <AlertCircle className="h-4 w-4" />
+                <p className="text-sm">{errorMessage}</p>
+              </div>
+            )}
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="space-y-2">
                 <Label htmlFor="name">Full Name</Label>
@@ -157,6 +202,11 @@ const Register = () => {
                     <Label htmlFor="admin" className="cursor-pointer">Administrator</Label>
                   </div>
                 </RadioGroup>
+                {role !== 'admin' && (
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Note: Non-admin accounts require approval before they can log in
+                  </p>
+                )}
               </div>
               
               <Button 

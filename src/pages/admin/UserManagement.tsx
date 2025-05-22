@@ -1,10 +1,10 @@
 
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
-import { Search, Plus, User, Shield, DatabaseIcon, Lock, Unlock, X } from 'lucide-react';
+import { Search, Plus, User as UserIcon, Shield, DatabaseIcon, Lock, Unlock, X, Check, UserPlus } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   Table,
@@ -14,8 +14,108 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { useAuth, User } from '@/contexts/AuthContext';
+import { useToast } from '@/hooks/use-toast';
 
 const UserManagement = () => {
+  const { getAllUsers, approveUser, deactivateUser, activateUser, deleteUser, user: currentUser } = useAuth();
+  const { toast } = useToast();
+  const [users, setUsers] = useState<User[]>([]);
+  const [filteredUsers, setFilteredUsers] = useState<User[]>([]);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [activeTab, setActiveTab] = useState('all');
+
+  // Load users on component mount
+  useEffect(() => {
+    const allUsers = getAllUsers();
+    setUsers(allUsers);
+    setFilteredUsers(allUsers);
+  }, [getAllUsers]);
+
+  // Filter users based on search query and active tab
+  useEffect(() => {
+    let result = users;
+    
+    // Filter by search query
+    if (searchQuery) {
+      const query = searchQuery.toLowerCase();
+      result = result.filter(user => 
+        user.name.toLowerCase().includes(query) || 
+        user.email.toLowerCase().includes(query)
+      );
+    }
+    
+    // Filter by tab
+    if (activeTab !== 'all') {
+      result = result.filter(user => user.role === activeTab.slice(0, -1)); // Remove 's' from the end
+    }
+    
+    setFilteredUsers(result);
+  }, [searchQuery, activeTab, users]);
+
+  // Handle user actions
+  const handleApproveUser = (userId: string) => {
+    approveUser(userId);
+    toast({ title: "Success", description: "User has been approved" });
+    
+    // Update local state
+    setUsers(prev => prev.map(user => 
+      user.id === userId ? { ...user, status: 'active' } : user
+    ));
+  };
+
+  const handleActivateUser = (userId: string) => {
+    activateUser(userId);
+    toast({ title: "Success", description: "User has been activated" });
+    
+    // Update local state
+    setUsers(prev => prev.map(user => 
+      user.id === userId ? { ...user, status: 'active' } : user
+    ));
+  };
+
+  const handleDeactivateUser = (userId: string) => {
+    deactivateUser(userId);
+    toast({ title: "Success", description: "User has been deactivated" });
+    
+    // Update local state
+    setUsers(prev => prev.map(user => 
+      user.id === userId ? { ...user, status: 'inactive' } : user
+    ));
+  };
+
+  const handleDeleteUser = (userId: string) => {
+    const userToDelete = users.find(u => u.id === userId);
+    
+    // Don't allow deleting yourself
+    if (userToDelete?.id === currentUser?.id) {
+      toast({ 
+        title: "Error", 
+        description: "You cannot delete your own account",
+        variant: "destructive"
+      });
+      return;
+    }
+    
+    deleteUser(userId);
+    toast({ title: "Success", description: "User has been deleted" });
+    
+    // Update local state
+    setUsers(prev => prev.filter(user => user.id !== userId));
+  };
+
+  // Generate counts for tabs
+  const counts = {
+    all: users.length,
+    doctors: users.filter(u => u.role === 'doctor').length,
+    patients: users.filter(u => u.role === 'patient').length,
+    labs: users.filter(u => u.role === 'lab').length,
+    admins: users.filter(u => u.role === 'admin').length,
+  };
+
+  // Get pending users
+  const pendingUsers = users.filter(u => u.status === 'pending');
+
   return (
     <div className="space-y-6">
       <div>
@@ -30,22 +130,28 @@ const UserManagement = () => {
           <Input
             placeholder="Search users..."
             className="pl-8"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
           />
         </div>
         <Button>
-          <Plus className="h-4 w-4 mr-2" />
+          <UserPlus className="h-4 w-4 mr-2" />
           Add New User
         </Button>
       </div>
       
       {/* User Tabs */}
-      <Tabs defaultValue="all">
+      <Tabs 
+        defaultValue="all" 
+        value={activeTab} 
+        onValueChange={setActiveTab}
+      >
         <TabsList className="mb-4">
-          <TabsTrigger value="all">All Users (243)</TabsTrigger>
-          <TabsTrigger value="doctors">Doctors (68)</TabsTrigger>
-          <TabsTrigger value="patients">Patients (142)</TabsTrigger>
-          <TabsTrigger value="labs">Labs (25)</TabsTrigger>
-          <TabsTrigger value="admins">Admins (8)</TabsTrigger>
+          <TabsTrigger value="all">All Users ({counts.all})</TabsTrigger>
+          <TabsTrigger value="doctors">Doctors ({counts.doctors})</TabsTrigger>
+          <TabsTrigger value="patients">Patients ({counts.patients})</TabsTrigger>
+          <TabsTrigger value="labs">Labs ({counts.labs})</TabsTrigger>
+          <TabsTrigger value="admins">Admins ({counts.admins})</TabsTrigger>
         </TabsList>
         
         <TabsContent value="all">
@@ -63,185 +169,187 @@ const UserManagement = () => {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {[
-                    {
-                      name: "Dr. Michael Smith",
-                      email: "dr.smith@medrec.com",
-                      role: "doctor",
-                      status: "active",
-                      lastActivity: "Today, 11:30 AM"
-                    },
-                    {
-                      name: "John Patient",
-                      email: "john@example.com",
-                      role: "patient",
-                      status: "active",
-                      lastActivity: "Today, 10:15 AM"
-                    },
-                    {
-                      name: "Metro Medical Lab",
-                      email: "lab@metromedical.com",
-                      role: "lab",
-                      status: "active",
-                      lastActivity: "Today, 9:45 AM"
-                    },
-                    {
-                      name: "Sarah Johnson",
-                      email: "sarah@example.com",
-                      role: "patient",
-                      status: "active",
-                      lastActivity: "Yesterday, 3:20 PM"
-                    },
-                    {
-                      name: "Dr. Emily Johnson",
-                      email: "dr.johnson@medrec.com",
-                      role: "doctor",
-                      status: "active",
-                      lastActivity: "Yesterday, 2:10 PM"
-                    },
-                    {
-                      name: "Admin User",
-                      email: "admin@medrec.com",
-                      role: "admin",
-                      status: "active",
-                      lastActivity: "Today, 9:00 AM"
-                    },
-                    {
-                      name: "Robert Wilson",
-                      email: "robert@example.com",
-                      role: "patient",
-                      status: "inactive",
-                      lastActivity: "May 10, 2025"
-                    },
-                    {
-                      name: "City General Lab",
-                      email: "lab@citygeneral.com",
-                      role: "lab",
-                      status: "active",
-                      lastActivity: "Yesterday, 11:05 AM"
-                    },
-                    {
-                      name: "Dr. Robert Williams",
-                      email: "dr.williams@medrec.com",
-                      role: "doctor",
-                      status: "pending",
-                      lastActivity: "N/A"
-                    }
-                  ].map((user, index) => (
-                    <TableRow key={index}>
-                      <TableCell className="font-medium">
-                        <div className="flex items-center space-x-2">
-                          <div className={`p-2 rounded-full 
-                            ${user.role === "doctor" ? "bg-primary/10" : 
-                              user.role === "patient" ? "bg-secondary/10" :
-                              user.role === "lab" ? "bg-accent/20" :
-                              "bg-muted"}
-                          `}>
-                            {user.role === "doctor" && <User className="h-4 w-4 text-primary" />}
-                            {user.role === "patient" && <User className="h-4 w-4 text-secondary" />}
-                            {user.role === "lab" && <DatabaseIcon className="h-4 w-4 text-accent-foreground" />}
-                            {user.role === "admin" && <Shield className="h-4 w-4 text-destructive" />}
-                          </div>
-                          {user.name}
-                        </div>
-                      </TableCell>
-                      <TableCell>{user.email}</TableCell>
-                      <TableCell>
-                        <Badge variant="outline" className="capitalize">
-                          {user.role}
-                        </Badge>
-                      </TableCell>
-                      <TableCell>
-                        <Badge 
-                          variant={
-                            user.status === "active" ? "default" :
-                            user.status === "inactive" ? "secondary" :
-                            "outline"
-                          }
-                          className={
-                            user.status === "active" ? "bg-green-100 text-green-800 hover:bg-green-100" :
-                            user.status === "inactive" ? "bg-gray-100 text-gray-800 hover:bg-gray-100" :
-                            "bg-yellow-100 text-yellow-800 hover:bg-yellow-100"
-                          }
-                        >
-                          {user.status}
-                        </Badge>
-                      </TableCell>
-                      <TableCell>{user.lastActivity}</TableCell>
-                      <TableCell className="text-right">
-                        <div className="flex justify-end space-x-2">
-                          <Button variant="ghost" size="icon">
-                            <User className="h-4 w-4" />
-                          </Button>
-                          {user.status === "active" ? (
-                            <Button variant="ghost" size="icon">
-                              <Lock className="h-4 w-4" />
-                            </Button>
-                          ) : (
-                            <Button variant="ghost" size="icon">
-                              <Unlock className="h-4 w-4" />
-                            </Button>
-                          )}
-                          <Button variant="ghost" size="icon">
-                            <X className="h-4 w-4" />
-                          </Button>
-                        </div>
+                  {filteredUsers.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
+                        No users found
                       </TableCell>
                     </TableRow>
-                  ))}
+                  ) : (
+                    filteredUsers.map((user) => (
+                      <TableRow key={user.id}>
+                        <TableCell className="font-medium">
+                          <div className="flex items-center space-x-2">
+                            <div className={`p-2 rounded-full 
+                              ${user.role === "doctor" ? "bg-primary/10" : 
+                                user.role === "patient" ? "bg-secondary/10" :
+                                user.role === "lab" ? "bg-accent/20" :
+                                "bg-muted"}
+                            `}>
+                              {user.role === "doctor" && <UserIcon className="h-4 w-4 text-primary" />}
+                              {user.role === "patient" && <UserIcon className="h-4 w-4 text-secondary" />}
+                              {user.role === "lab" && <DatabaseIcon className="h-4 w-4 text-accent-foreground" />}
+                              {user.role === "admin" && <Shield className="h-4 w-4 text-destructive" />}
+                            </div>
+                            {user.name}
+                          </div>
+                        </TableCell>
+                        <TableCell>{user.email}</TableCell>
+                        <TableCell>
+                          <Badge variant="outline" className="capitalize">
+                            {user.role}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>
+                          <Badge 
+                            variant={
+                              user.status === "active" ? "default" :
+                              user.status === "inactive" ? "secondary" :
+                              "outline"
+                            }
+                            className={
+                              user.status === "active" ? "bg-green-100 text-green-800 hover:bg-green-100" :
+                              user.status === "inactive" ? "bg-gray-100 text-gray-800 hover:bg-gray-100" :
+                              "bg-yellow-100 text-yellow-800 hover:bg-yellow-100"
+                            }
+                          >
+                            {user.status || 'active'}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>
+                          {user.lastActivity ? new Date(user.lastActivity).toLocaleString() : 'Never'}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <div className="flex justify-end space-x-2">
+                            {user.status === "active" ? (
+                              <Button 
+                                variant="ghost" 
+                                size="icon" 
+                                onClick={() => handleDeactivateUser(user.id)}
+                                title="Deactivate User"
+                              >
+                                <Lock className="h-4 w-4" />
+                              </Button>
+                            ) : (
+                              <Button 
+                                variant="ghost" 
+                                size="icon"
+                                onClick={() => handleActivateUser(user.id)}
+                                title="Activate User"
+                              >
+                                <Unlock className="h-4 w-4" />
+                              </Button>
+                            )}
+                            <Button 
+                              variant="ghost" 
+                              size="icon"
+                              onClick={() => handleDeleteUser(user.id)}
+                              title="Delete User"
+                              disabled={user.id === currentUser?.id}
+                            >
+                              <X className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  )}
                 </TableBody>
               </Table>
             </CardContent>
           </Card>
         </TabsContent>
         
-        <TabsContent value="doctors">
-          <Card>
-            <CardHeader>
-              <CardTitle>Doctor Accounts</CardTitle>
-              <CardDescription>Manage medical provider accounts</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <p>Doctor accounts will be displayed here</p>
-            </CardContent>
-          </Card>
-        </TabsContent>
-        
-        <TabsContent value="patients">
-          <Card>
-            <CardHeader>
-              <CardTitle>Patient Accounts</CardTitle>
-              <CardDescription>Manage patient accounts</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <p>Patient accounts will be displayed here</p>
-            </CardContent>
-          </Card>
-        </TabsContent>
-        
-        <TabsContent value="labs">
-          <Card>
-            <CardHeader>
-              <CardTitle>Laboratory Accounts</CardTitle>
-              <CardDescription>Manage laboratory and testing facility accounts</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <p>Laboratory accounts will be displayed here</p>
-            </CardContent>
-          </Card>
-        </TabsContent>
-        
-        <TabsContent value="admins">
-          <Card>
-            <CardHeader>
-              <CardTitle>Administrator Accounts</CardTitle>
-              <CardDescription>Manage system administrator accounts</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <p>Administrator accounts will be displayed here</p>
-            </CardContent>
-          </Card>
-        </TabsContent>
+        {['doctors', 'patients', 'labs', 'admins'].map((roleTab) => (
+          <TabsContent key={roleTab} value={roleTab}>
+            <Card>
+              <CardHeader>
+                <CardTitle className="capitalize">{roleTab} Accounts</CardTitle>
+                <CardDescription>Manage {roleTab} accounts</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Name</TableHead>
+                      <TableHead>Email</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead>Last Activity</TableHead>
+                      <TableHead className="text-right">Actions</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {filteredUsers.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">
+                          No {roleTab} found
+                        </TableCell>
+                      </TableRow>
+                    ) : (
+                      filteredUsers.map((user) => (
+                        <TableRow key={user.id}>
+                          <TableCell className="font-medium">{user.name}</TableCell>
+                          <TableCell>{user.email}</TableCell>
+                          <TableCell>
+                            <Badge 
+                              variant={
+                                user.status === "active" ? "default" :
+                                user.status === "inactive" ? "secondary" :
+                                "outline"
+                              }
+                              className={
+                                user.status === "active" ? "bg-green-100 text-green-800 hover:bg-green-100" :
+                                user.status === "inactive" ? "bg-gray-100 text-gray-800 hover:bg-gray-100" :
+                                "bg-yellow-100 text-yellow-800 hover:bg-yellow-100"
+                              }
+                            >
+                              {user.status || 'active'}
+                            </Badge>
+                          </TableCell>
+                          <TableCell>
+                            {user.lastActivity ? new Date(user.lastActivity).toLocaleString() : 'Never'}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <div className="flex justify-end space-x-2">
+                              {user.status === "active" ? (
+                                <Button 
+                                  variant="ghost" 
+                                  size="icon" 
+                                  onClick={() => handleDeactivateUser(user.id)}
+                                  title="Deactivate User"
+                                >
+                                  <Lock className="h-4 w-4" />
+                                </Button>
+                              ) : (
+                                <Button 
+                                  variant="ghost" 
+                                  size="icon"
+                                  onClick={() => handleActivateUser(user.id)}
+                                  title="Activate User"
+                                >
+                                  <Unlock className="h-4 w-4" />
+                                </Button>
+                              )}
+                              <Button 
+                                variant="ghost" 
+                                size="icon"
+                                onClick={() => handleDeleteUser(user.id)}
+                                title="Delete User"
+                                disabled={user.id === currentUser?.id}
+                              >
+                                <X className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      ))
+                    )}
+                  </TableBody>
+                </Table>
+              </CardContent>
+            </Card>
+          </TabsContent>
+        ))}
       </Tabs>
       
       {/* Registration Requests */}
@@ -251,60 +359,56 @@ const UserManagement = () => {
           <CardDescription>New user accounts awaiting approval</CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="space-y-4">
-            {[
-              {
-                name: "Dr. Robert Williams",
-                email: "dr.williams@medrec.com",
-                role: "doctor",
-                requested: "Today, 8:15 AM",
-                specialty: "Neurology"
-              },
-              {
-                name: "Pacific Medical Laboratory",
-                email: "contact@pacificlab.com",
-                role: "lab",
-                requested: "Yesterday, 2:30 PM",
-                specialty: "Full Service Medical Laboratory"
-              },
-              {
-                name: "Jennifer Martinez",
-                email: "jennifer@example.com",
-                role: "patient",
-                requested: "Yesterday, 11:45 AM",
-                specialty: "N/A"
-              }
-            ].map((request, index) => (
-              <div key={index} className="flex items-center justify-between p-4 border rounded-md hover:bg-muted/50 transition-colors">
-                <div className="flex items-center space-x-4">
-                  <div className={`p-2 rounded-full 
-                    ${request.role === "doctor" ? "bg-primary/10" : 
-                      request.role === "patient" ? "bg-secondary/10" :
-                      request.role === "lab" ? "bg-accent/20" :
-                      "bg-muted"}
-                  `}>
-                    {request.role === "doctor" && <User className="h-4 w-4 text-primary" />}
-                    {request.role === "patient" && <User className="h-4 w-4 text-secondary" />}
-                    {request.role === "lab" && <DatabaseIcon className="h-4 w-4 text-accent-foreground" />}
-                  </div>
-                  <div>
-                    <h3 className="font-medium">{request.name}</h3>
-                    <p className="text-sm text-muted-foreground">{request.email}</p>
-                    <div className="flex space-x-4 mt-1">
-                      <Badge variant="outline" className="capitalize">{request.role}</Badge>
-                      <span className="text-xs text-muted-foreground">
-                        Requested: {request.requested}
-                      </span>
+          {pendingUsers.length === 0 ? (
+            <div className="text-center py-8 text-muted-foreground">
+              No pending requests
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {pendingUsers.map((request) => (
+                <div key={request.id} className="flex items-center justify-between p-4 border rounded-md hover:bg-muted/50 transition-colors">
+                  <div className="flex items-center space-x-4">
+                    <div className={`p-2 rounded-full 
+                      ${request.role === "doctor" ? "bg-primary/10" : 
+                        request.role === "patient" ? "bg-secondary/10" :
+                        request.role === "lab" ? "bg-accent/20" :
+                        "bg-muted"}
+                    `}>
+                      {request.role === "doctor" && <UserIcon className="h-4 w-4 text-primary" />}
+                      {request.role === "patient" && <UserIcon className="h-4 w-4 text-secondary" />}
+                      {request.role === "lab" && <DatabaseIcon className="h-4 w-4 text-accent-foreground" />}
+                    </div>
+                    <div>
+                      <h3 className="font-medium">{request.name}</h3>
+                      <p className="text-sm text-muted-foreground">{request.email}</p>
+                      <div className="flex space-x-4 mt-1">
+                        <Badge variant="outline" className="capitalize">{request.role}</Badge>
+                        <span className="text-xs text-muted-foreground">
+                          Requested: {request.lastActivity ? new Date(request.lastActivity).toLocaleString() : 'Unknown'}
+                        </span>
+                      </div>
                     </div>
                   </div>
+                  <div className="flex space-x-2">
+                    <Button 
+                      variant="outline" 
+                      size="sm"
+                      onClick={() => handleDeleteUser(request.id)}
+                    >
+                      Reject
+                    </Button>
+                    <Button 
+                      size="sm"
+                      onClick={() => handleApproveUser(request.id)}
+                    >
+                      <Check className="h-4 w-4 mr-1" />
+                      Approve
+                    </Button>
+                  </div>
                 </div>
-                <div className="flex space-x-2">
-                  <Button variant="outline" size="sm">Reject</Button>
-                  <Button size="sm">Approve</Button>
-                </div>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          )}
         </CardContent>
       </Card>
     </div>

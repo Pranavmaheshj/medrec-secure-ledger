@@ -8,6 +8,8 @@ export interface User {
   name: string;
   email: string;
   role: UserRole;
+  status?: 'active' | 'inactive' | 'pending';
+  lastActivity?: string;
 }
 
 interface AuthContextType {
@@ -19,6 +21,11 @@ interface AuthContextType {
   isLoading: boolean;
   userRecords: Record<string, any>[];
   addRecord: (record: Record<string, any>) => void;
+  getAllUsers: () => User[];
+  approveUser: (userId: string) => void;
+  deactivateUser: (userId: string) => void;
+  activateUser: (userId: string) => void;
+  deleteUser: (userId: string) => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -66,6 +73,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       name,
       email,
       role,
+      status: role === 'admin' ? 'active' : 'pending', // Admins are auto-approved, others pending
+      lastActivity: new Date().toISOString(),
     };
     
     // Store user credentials
@@ -81,10 +90,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     // Save to localStorage
     localStorage.setItem('medrec_users', JSON.stringify(users));
     localStorage.setItem('medrec_all_users', JSON.stringify(allUsers));
-    localStorage.setItem('medrec_user', JSON.stringify(newUser));
     
-    setUser(newUser);
-    setUserRecords([]);
+    // Only set as current user if role is admin (auto-approved)
+    // or if there are no admins yet (first user becomes admin)
+    if (role === 'admin') {
+      localStorage.setItem('medrec_user', JSON.stringify(newUser));
+      setUser(newUser);
+      setUserRecords([]);
+    }
+    
     setIsLoading(false);
   };
 
@@ -112,6 +126,22 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setIsLoading(false);
       throw new Error(`This account is registered as a ${userData.role}, not a ${role}`);
     }
+    
+    // Check if user is active
+    if (userData.status === 'pending') {
+      setIsLoading(false);
+      throw new Error('Your account is pending approval by an administrator');
+    }
+    
+    if (userData.status === 'inactive') {
+      setIsLoading(false);
+      throw new Error('Your account has been deactivated. Please contact an administrator');
+    }
+    
+    // Update last activity
+    userData.lastActivity = new Date().toISOString();
+    allUsers[userCredentials.userId] = userData;
+    localStorage.setItem('medrec_all_users', JSON.stringify(allUsers));
     
     // Store current user
     localStorage.setItem('medrec_user', JSON.stringify(userData));
@@ -151,6 +181,76 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setUser(null);
     setUserRecords([]);
   };
+  
+  // Admin functions for user management
+  const getAllUsers = (): User[] => {
+    if (user?.role !== 'admin') {
+      return [];
+    }
+    
+    const allUsers = getStoredItem('medrec_all_users') || {};
+    return Object.values(allUsers) as User[];
+  };
+  
+  const approveUser = (userId: string) => {
+    if (user?.role !== 'admin') return;
+    
+    const allUsers = getStoredItem('medrec_all_users') || {};
+    if (allUsers[userId]) {
+      allUsers[userId].status = 'active';
+      localStorage.setItem('medrec_all_users', JSON.stringify(allUsers));
+    }
+  };
+  
+  const deactivateUser = (userId: string) => {
+    if (user?.role !== 'admin') return;
+    
+    const allUsers = getStoredItem('medrec_all_users') || {};
+    if (allUsers[userId]) {
+      allUsers[userId].status = 'inactive';
+      localStorage.setItem('medrec_all_users', JSON.stringify(allUsers));
+    }
+  };
+  
+  const activateUser = (userId: string) => {
+    if (user?.role !== 'admin') return;
+    
+    const allUsers = getStoredItem('medrec_all_users') || {};
+    if (allUsers[userId]) {
+      allUsers[userId].status = 'active';
+      localStorage.setItem('medrec_all_users', JSON.stringify(allUsers));
+    }
+  };
+  
+  const deleteUser = (userId: string) => {
+    if (user?.role !== 'admin') return;
+    
+    const allUsers = getStoredItem('medrec_all_users') || {};
+    const users = getStoredItem('medrec_users') || {};
+    
+    if (allUsers[userId]) {
+      const userEmail = allUsers[userId].email;
+      
+      // Delete user data
+      delete allUsers[userId];
+      
+      // Delete user credentials
+      if (userEmail && users[userEmail]) {
+        delete users[userEmail];
+      }
+      
+      // Delete user records
+      const allRecords = getStoredItem('medrec_records') || {};
+      if (allRecords[userId]) {
+        delete allRecords[userId];
+      }
+      
+      // Update localStorage
+      localStorage.setItem('medrec_all_users', JSON.stringify(allUsers));
+      localStorage.setItem('medrec_users', JSON.stringify(users));
+      localStorage.setItem('medrec_records', JSON.stringify(allRecords));
+    }
+  };
 
   return (
     <AuthContext.Provider value={{
@@ -161,7 +261,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       isAuthenticated: !!user,
       isLoading,
       userRecords,
-      addRecord
+      addRecord,
+      getAllUsers,
+      approveUser,
+      deactivateUser,
+      activateUser,
+      deleteUser
     }}>
       {children}
     </AuthContext.Provider>

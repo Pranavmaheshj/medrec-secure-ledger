@@ -8,12 +8,14 @@ import { Label } from '@/components/ui/label';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '@/components/ui/card';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { useToast } from '@/hooks/use-toast';
+import { AlertCircle } from 'lucide-react';
 
 const Login = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [role, setRole] = useState<UserRole>('patient');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [errorMessage, setErrorMessage] = useState('');
   
   const { login } = useAuth();
   const navigate = useNavigate();
@@ -21,13 +23,10 @@ const Login = () => {
   
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setErrorMessage('');
     
     if (!email || !password) {
-      toast({
-        title: 'Validation Error',
-        description: 'Please fill in all fields',
-        variant: 'destructive',
-      });
+      setErrorMessage('Please fill in all fields');
       return;
     }
     
@@ -37,6 +36,8 @@ const Login = () => {
       await login(email, password, role);
       navigate(`/${role}`);
     } catch (error: any) {
+      setErrorMessage(error.message || 'Invalid credentials. Please try again.');
+      
       toast({
         title: 'Login Failed',
         description: error.message || 'Invalid credentials. Please try again.',
@@ -68,6 +69,12 @@ const Login = () => {
             </CardDescription>
           </CardHeader>
           <CardContent>
+            {errorMessage && (
+              <div className="bg-destructive/10 text-destructive p-3 rounded-md flex items-center space-x-2 mb-4">
+                <AlertCircle className="h-4 w-4" />
+                <p className="text-sm">{errorMessage}</p>
+              </div>
+            )}
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="space-y-2">
                 <Label htmlFor="email">Email</Label>
