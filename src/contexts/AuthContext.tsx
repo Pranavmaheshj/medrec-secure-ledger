@@ -1,4 +1,3 @@
-
 import React, { createContext, useState, useContext, useEffect } from 'react';
 
 export type UserRole = 'admin' | 'patient' | 'doctor' | 'lab';
@@ -96,24 +95,26 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     // Create verification token
     const verificationToken = generateToken();
     
-    // Create new user with explicit status type
+    // Create new user with explicit status type and set all users to active
     const userId = `user-${Date.now().toString(36)}-${Math.random().toString(36).substr(2, 9)}`;
     const newUser: User = {
       id: userId,
       name,
       email,
       role,
-      status: role === 'admin' ? 'active' as UserStatus : 'unverified' as UserStatus,
+      // Set all users to active status
+      status: 'active' as UserStatus,
       lastActivity: new Date().toISOString(),
-      emailVerified: role === 'admin' ? true : false,
-      verificationToken: role === 'admin' ? undefined : verificationToken
+      // Set emailVerified to true for all users
+      emailVerified: true,
+      verificationToken: undefined
     };
     
     // Store user credentials
     users[email] = {
       password,
       userId,
-      verificationToken: role === 'admin' ? undefined : verificationToken
+      verificationToken: undefined
     };
     
     // Store user data
@@ -124,22 +125,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     localStorage.setItem('medrec_users', JSON.stringify(users));
     localStorage.setItem('medrec_all_users', JSON.stringify(allUsers));
     
-    // Send verification email for non-admin users
-    if (role !== 'admin') {
-      const verificationLink = `${window.location.origin}/verify-email?token=${verificationToken}`;
-      await simulateSendEmail(
-        email,
-        "Verify your MedRec account",
-        `Welcome to MedRec! Please verify your email by clicking on this link: ${verificationLink}`
-      );
-    }
-    
-    // Only set as current user if role is admin (auto-approved)
-    if (role === 'admin') {
-      localStorage.setItem('medrec_user', JSON.stringify(newUser));
-      setUser(newUser);
-      setUserRecords([]);
-    }
+    // Set as current user
+    localStorage.setItem('medrec_user', JSON.stringify(newUser));
+    setUser(newUser);
+    setUserRecords([]);
     
     setIsLoading(false);
   };
@@ -169,22 +158,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       throw new Error(`This account is registered as a ${userData.role}, not a ${role}`);
     }
     
-    // Check if email is verified
-    if (userData.status === 'unverified') {
-      setIsLoading(false);
-      throw new Error('Please verify your email address before logging in. Check your inbox for the verification link.');
-    }
-    
-    // Check if user is active
-    if (userData.status === 'pending') {
-      setIsLoading(false);
-      throw new Error('Your account is pending approval by an administrator');
-    }
-    
-    if (userData.status === 'inactive') {
-      setIsLoading(false);
-      throw new Error('Your account has been deactivated. Please contact an administrator');
-    }
+    // No longer checking email verification or user status
     
     // Update last activity
     userData.lastActivity = new Date().toISOString();
