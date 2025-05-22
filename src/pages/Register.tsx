@@ -19,6 +19,7 @@ const Register = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [success, setSuccess] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
+  const [verificationSent, setVerificationSent] = useState(false);
   
   const { register } = useAuth();
   const navigate = useNavigate();
@@ -38,6 +39,11 @@ const Register = () => {
       return;
     }
     
+    if (password.length < 6) {
+      setErrorMessage('Password must be at least 6 characters');
+      return;
+    }
+    
     setIsSubmitting(true);
     
     try {
@@ -51,11 +57,12 @@ const Register = () => {
         });
         navigate(`/${role}`);
       } else {
-        // Non-admin accounts need approval
+        // Non-admin accounts need email verification first
         setSuccess(true);
+        setVerificationSent(true);
         toast({
-          title: 'Registration Pending Approval',
-          description: 'Your account has been created and is awaiting administrator approval',
+          title: 'Registration Successful',
+          description: 'Your account has been created. Please verify your email to continue.',
         });
       }
     } catch (error: any) {
@@ -71,23 +78,38 @@ const Register = () => {
     }
   };
   
-  if (success && role !== 'admin') {
+  if (success) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background p-4">
         <Card className="w-full max-w-md">
           <CardHeader>
-            <CardTitle>Registration Pending</CardTitle>
+            <CardTitle>{verificationSent ? 'Verify Your Email' : 'Registration Pending'}</CardTitle>
             <CardDescription>
-              Your account is awaiting administrator approval
+              {verificationSent 
+                ? 'Please verify your email address to continue'
+                : 'Your account is awaiting administrator approval'
+              }
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="bg-primary/10 text-primary p-4 rounded-md text-center">
+            <div className={`${verificationSent ? 'bg-primary/10 text-primary' : 'bg-yellow-100 text-yellow-800'} p-4 rounded-md text-center`}>
               <p className="text-lg font-medium mb-2">Thank you for registering!</p>
-              <p className="mb-4">
-                Your account has been created and is pending approval from an administrator. 
-                You will be able to log in once your account has been approved.
-              </p>
+              {verificationSent ? (
+                <>
+                  <p className="mb-4">
+                    We've sent a verification email to <strong>{email}</strong>. 
+                    Please check your inbox and click on the verification link to activate your account.
+                  </p>
+                  <p className="text-sm mb-4">
+                    Once verified, your account will need administrator approval before you can log in.
+                  </p>
+                </>
+              ) : (
+                <p className="mb-4">
+                  Your account has been created and is pending approval from an administrator. 
+                  You will be able to log in once your account has been approved.
+                </p>
+              )}
               <Button 
                 onClick={() => navigate('/login')}
                 className="mt-2"
@@ -163,6 +185,9 @@ const Register = () => {
                   onChange={(e) => setPassword(e.target.value)}
                   required
                 />
+                <p className="text-xs text-muted-foreground mt-1">
+                  Must be at least 6 characters
+                </p>
               </div>
               
               <div className="space-y-2">
@@ -204,7 +229,7 @@ const Register = () => {
                 </RadioGroup>
                 {role !== 'admin' && (
                   <p className="text-xs text-muted-foreground mt-1">
-                    Note: Non-admin accounts require approval before they can log in
+                    Note: Non-admin accounts require email verification and administrator approval before they can log in
                   </p>
                 )}
               </div>

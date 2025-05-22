@@ -2,7 +2,7 @@
 import React, { createContext, useState, useContext, useEffect } from 'react';
 
 export type UserRole = 'admin' | 'patient' | 'doctor' | 'lab';
-export type UserStatus = 'active' | 'inactive' | 'pending';
+export type UserStatus = 'active' | 'inactive' | 'pending' | 'unverified';
 
 export interface User {
   id: string;
@@ -11,6 +11,8 @@ export interface User {
   role: UserRole;
   status?: UserStatus;
   lastActivity?: string;
+  emailVerified?: boolean;
+  verificationToken?: string;
 }
 
 interface AuthContextType {
@@ -27,6 +29,10 @@ interface AuthContextType {
   deactivateUser: (userId: string) => void;
   activateUser: (userId: string) => void;
   deleteUser: (userId: string) => void;
+  verifyEmail: (token: string) => Promise<boolean>;
+  resendVerificationEmail: (email: string) => Promise<void>;
+  forgotPassword: (email: string) => Promise<void>;
+  resetPassword: (token: string, newPassword: string) => Promise<boolean>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -35,6 +41,26 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 const getStoredItem = (key: string) => {
   const item = localStorage.getItem(key);
   return item ? JSON.parse(item) : null;
+};
+
+// Helper to generate a verification token
+const generateToken = () => {
+  return Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+};
+
+// Helper to simulate sending an email
+const simulateSendEmail = (email: string, subject: string, body: string) => {
+  console.log(`Email sent to ${email}`);
+  console.log(`Subject: ${subject}`);
+  console.log(`Body: ${body}`);
+  
+  // Store the email in localStorage for demo purposes
+  const emails = getStoredItem('medrec_emails') || {};
+  emails[email] = emails[email] || [];
+  emails[email].push({ subject, body, date: new Date().toISOString() });
+  localStorage.setItem('medrec_emails', JSON.stringify(emails));
+  
+  return Promise.resolve();
 };
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -67,6 +93,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       throw new Error('User already exists with this email');
     }
     
+    // Create verification token
+    const verificationToken = generateToken();
+    
     // Create new user with explicit status type
     const userId = `user-${Date.now().toString(36)}-${Math.random().toString(36).substr(2, 9)}`;
     const newUser: User = {
@@ -74,14 +103,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       name,
       email,
       role,
-      status: role === 'admin' ? 'active' as UserStatus : 'pending' as UserStatus,
+      status: role === 'admin' ? 'active' as UserStatus : 'unverified' as UserStatus,
       lastActivity: new Date().toISOString(),
+      emailVerified: role === 'admin' ? true : false,
+      verificationToken: role === 'admin' ? undefined : verificationToken
     };
     
     // Store user credentials
     users[email] = {
       password,
       userId,
+      verificationToken: role === 'admin' ? undefined : verificationToken
     };
     
     // Store user data
@@ -92,8 +124,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     localStorage.setItem('medrec_users', JSON.stringify(users));
     localStorage.setItem('medrec_all_users', JSON.stringify(allUsers));
     
+    // Send verification email for non-admin users
+    if (role !== 'admin') {
+      const verificationLink = `${window.location.origin}/verify-email?token=${verificationToken}`;
+      await simulateSendEmail(
+        email,
+        "Verify your MedRec account",
+        `Welcome to MedRec! Please verify your email by clicking on this link: ${verificationLink}`
+      );
+    }
+    
     // Only set as current user if role is admin (auto-approved)
-    // or if there are no admins yet (first user becomes admin)
     if (role === 'admin') {
       localStorage.setItem('medrec_user', JSON.stringify(newUser));
       setUser(newUser);
@@ -128,6 +169,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       throw new Error(`This account is registered as a ${userData.role}, not a ${role}`);
     }
     
+    // Check if email is verified
+    if (userData.status === 'unverified') {
+      setIsLoading(false);
+      throw new Error('Please verify your email address before logging in. Check your inbox for the verification link.');
+    }
+    
     // Check if user is active
     if (userData.status === 'pending') {
       setIsLoading(false);
@@ -154,6 +201,163 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setUserRecords(userSpecificRecords);
     
     setIsLoading(false);
+  };
+
+  // Email verification function
+  const verifyEmail = async (token: string): Promise<boolean> => {
+    setIsLoading(true);
+    
+    // Get all users and their credentials
+    const users = getStoredItem('medrec_users') || {};
+    const allUsers = getStoredItem('medrec_all_users') || {};
+    
+    // Find user with this verification token
+    let userEmail = null;
+    let userId = null;
+    
+    for (const email in users) {
+      if (users[email].verificationToken === token) {
+        userEmail = email;
+        userId = users[email].userId;
+        break;
+      }
+    }
+    
+    if (!userEmail || !userId || !allUsers[userId]) {
+      setIsLoading(false);
+      return false;
+    }
+    
+    // Update user status
+    const userData = allUsers[userId];
+    userData.emailVerified = true;
+    userData.status = userData.role === 'admin' ? 'active' as UserStatus : 'pending' as UserStatus;
+    userData.verificationToken = undefined;
+    
+    // Update credential
+    users[userEmail].verificationToken = undefined;
+    
+    // Save changes
+    allUsers[userId] = userData;
+    localStorage.setItem('medrec_all_users', JSON.stringify(allUsers));
+    localStorage.setItem('medrec_users', JSON.stringify(users));
+    
+    setIsLoading(false);
+    return true;
+  };
+
+  // Resend verification email
+  const resendVerificationEmail = async (email: string) => {
+    // Get user data
+    const users = getStoredItem('medrec_users') || {};
+    const userCredentials = users[email];
+    
+    if (!userCredentials) {
+      throw new Error('No account found with this email address');
+    }
+    
+    const allUsers = getStoredItem('medrec_all_users') || {};
+    const userData = allUsers[userCredentials.userId];
+    
+    if (!userData) {
+      throw new Error('User account data not found');
+    }
+    
+    if (userData.emailVerified) {
+      throw new Error('This email is already verified');
+    }
+    
+    // Generate new token
+    const verificationToken = generateToken();
+    
+    // Update user data
+    userData.verificationToken = verificationToken;
+    userCredentials.verificationToken = verificationToken;
+    
+    // Save changes
+    allUsers[userCredentials.userId] = userData;
+    users[email] = userCredentials;
+    localStorage.setItem('medrec_all_users', JSON.stringify(allUsers));
+    localStorage.setItem('medrec_users', JSON.stringify(users));
+    
+    // Send verification email
+    const verificationLink = `${window.location.origin}/verify-email?token=${verificationToken}`;
+    await simulateSendEmail(
+      email,
+      "Verify your MedRec account",
+      `Welcome to MedRec! Please verify your email by clicking on this link: ${verificationLink}`
+    );
+  };
+
+  // Forgot password function
+  const forgotPassword = async (email: string) => {
+    // Get user data
+    const users = getStoredItem('medrec_users') || {};
+    const userCredentials = users[email];
+    
+    if (!userCredentials) {
+      throw new Error('No account found with this email address');
+    }
+    
+    // Generate reset token
+    const resetToken = generateToken();
+    
+    // Store reset token
+    userCredentials.resetToken = resetToken;
+    userCredentials.resetTokenExpiry = new Date(Date.now() + 3600000).toISOString(); // 1 hour from now
+    
+    // Save changes
+    users[email] = userCredentials;
+    localStorage.setItem('medrec_users', JSON.stringify(users));
+    
+    // Send password reset email
+    const resetLink = `${window.location.origin}/reset-password?token=${resetToken}`;
+    await simulateSendEmail(
+      email,
+      "Reset your MedRec password",
+      `You requested a password reset. Please click on this link to create a new password: ${resetLink}`
+    );
+  };
+
+  // Reset password function
+  const resetPassword = async (token: string, newPassword: string): Promise<boolean> => {
+    // Get all users credentials
+    const users = getStoredItem('medrec_users') || {};
+    
+    // Find user with this reset token
+    let userEmail = null;
+    
+    for (const email in users) {
+      if (users[email].resetToken === token) {
+        userEmail = email;
+        break;
+      }
+    }
+    
+    if (!userEmail) {
+      return false;
+    }
+    
+    const userCredentials = users[userEmail];
+    
+    // Check if token has expired
+    const now = new Date();
+    const expiry = new Date(userCredentials.resetTokenExpiry);
+    
+    if (now > expiry) {
+      return false;
+    }
+    
+    // Update password and remove token
+    userCredentials.password = newPassword;
+    delete userCredentials.resetToken;
+    delete userCredentials.resetTokenExpiry;
+    
+    // Save changes
+    users[userEmail] = userCredentials;
+    localStorage.setItem('medrec_users', JSON.stringify(users));
+    
+    return true;
   };
 
   // Add a new record for the current user
@@ -267,7 +471,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       approveUser,
       deactivateUser,
       activateUser,
-      deleteUser
+      deleteUser,
+      verifyEmail,
+      resendVerificationEmail,
+      forgotPassword,
+      resetPassword
     }}>
       {children}
     </AuthContext.Provider>

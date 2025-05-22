@@ -21,6 +21,9 @@ import UserManagement from "./pages/admin/UserManagement";
 import PerformanceMetrics from "./pages/admin/PerformanceMetrics";
 import BlockchainExplorer from "./pages/admin/BlockchainExplorer";
 import MlSecurityDashboard from "./pages/admin/MlSecurityDashboard";
+import VerifyEmail from "./pages/VerifyEmail";
+import ForgotPassword from "./pages/ForgotPassword";
+import ResetPassword from "./pages/ResetPassword";
 
 const queryClient = new QueryClient();
 
@@ -35,6 +38,9 @@ const App = () => (
             <Route path="/" element={<Navigate to="/login" replace />} />
             <Route path="/login" element={<Login />} />
             <Route path="/register" element={<Register />} />
+            <Route path="/verify-email" element={<VerifyEmail />} />
+            <Route path="/forgot-password" element={<ForgotPassword />} />
+            <Route path="/reset-password" element={<ResetPassword />} />
             
             {/* Admin Routes */}
             <Route path="/admin" element={<ProtectedRoute role="admin" />}>

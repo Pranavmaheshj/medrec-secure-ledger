@@ -16,14 +16,16 @@ const Login = () => {
   const [role, setRole] = useState<UserRole>('patient');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
+  const [showResendVerification, setShowResendVerification] = useState(false);
   
-  const { login } = useAuth();
+  const { login, resendVerificationEmail } = useAuth();
   const navigate = useNavigate();
   const { toast } = useToast();
   
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMessage('');
+    setShowResendVerification(false);
     
     if (!email || !password) {
       setErrorMessage('Please fill in all fields');
@@ -38,6 +40,10 @@ const Login = () => {
     } catch (error: any) {
       setErrorMessage(error.message || 'Invalid credentials. Please try again.');
       
+      if (error.message?.includes('verify your email')) {
+        setShowResendVerification(true);
+      }
+      
       toast({
         title: 'Login Failed',
         description: error.message || 'Invalid credentials. Please try again.',
@@ -46,6 +52,26 @@ const Login = () => {
     } finally {
       setIsSubmitting(false);
     }
+  };
+  
+  const handleResendVerification = async () => {
+    try {
+      await resendVerificationEmail(email);
+      toast({
+        title: 'Verification Email Sent',
+        description: 'Please check your inbox for the verification link.',
+      });
+    } catch (error: any) {
+      toast({
+        title: 'Error',
+        description: error.message || 'Failed to resend verification email.',
+        variant: 'destructive',
+      });
+    }
+  };
+  
+  const handleForgotPassword = () => {
+    navigate('/forgot-password');
   };
   
   return (
@@ -75,6 +101,20 @@ const Login = () => {
                 <p className="text-sm">{errorMessage}</p>
               </div>
             )}
+            
+            {showResendVerification && (
+              <div className="bg-yellow-100 text-yellow-800 p-3 rounded-md mb-4">
+                <p className="text-sm mb-2">Your email address hasn't been verified yet.</p>
+                <Button 
+                  variant="outline" 
+                  size="sm"
+                  onClick={handleResendVerification}
+                >
+                  Resend Verification Email
+                </Button>
+              </div>
+            )}
+            
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="space-y-2">
                 <Label htmlFor="email">Email</Label>
@@ -89,7 +129,17 @@ const Login = () => {
               </div>
               
               <div className="space-y-2">
-                <Label htmlFor="password">Password</Label>
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="password">Password</Label>
+                  <Button 
+                    variant="link" 
+                    className="px-0 h-auto font-normal text-xs"
+                    type="button"
+                    onClick={handleForgotPassword}
+                  >
+                    Forgot password?
+                  </Button>
+                </div>
                 <Input
                   id="password"
                   type="password"
