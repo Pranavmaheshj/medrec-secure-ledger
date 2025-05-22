@@ -36,10 +36,10 @@ const Login = () => {
     try {
       await login(email, password, role);
       navigate(`/${role}`);
-    } catch (error) {
+    } catch (error: any) {
       toast({
         title: 'Login Failed',
-        description: 'Invalid credentials. Please try again.',
+        description: error.message || 'Invalid credentials. Please try again.',
         variant: 'destructive',
       });
     } finally {
@@ -136,9 +136,12 @@ const Login = () => {
               </Button>
             </form>
           </CardContent>
-          <CardFooter className="justify-center">
+          <CardFooter className="flex justify-center">
             <p className="text-sm text-muted-foreground">
-              Don't have an account? Contact your administrator.
+              Don't have an account?{' '}
+              <Link to="/register" className="text-primary hover:underline">
+                Register
+              </Link>
             </p>
           </CardFooter>
         </Card>
